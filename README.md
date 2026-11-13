@@ -1,58 +1,45 @@
-<p align="center"><a href="https://laravel.com" target="_blank"><img src="https://raw.githubusercontent.com/laravel/art/master/logo-lockup/5%20SVG/2%20CMYK/1%20Full%20Color/laravel-logolockup-cmyk-red.svg" width="400" alt="Laravel Logo"></a></p>
+# Clinic Queue API
 
-<p align="center">
-<a href="https://github.com/laravel/framework/actions"><img src="https://github.com/laravel/framework/workflows/tests/badge.svg" alt="Build Status"></a>
-<a href="https://packagist.org/packages/laravel/framework"><img src="https://img.shields.io/packagist/dt/laravel/framework" alt="Total Downloads"></a>
-<a href="https://packagist.org/packages/laravel/framework"><img src="https://img.shields.io/packagist/v/laravel/framework" alt="Latest Stable Version"></a>
-<a href="https://packagist.org/packages/laravel/framework"><img src="https://img.shields.io/packagist/l/laravel/framework" alt="License"></a>
-</p>
+REST API สำหรับระบบบัตรคิวโรงพยาบาล/คลินิก: ตู้กดบัตรคิว, จอแสดงคิว, โทรศัพท์ผู้ป่วยเช็กคิว และเคาน์เตอร์เจ้าหน้าที่เรียกคิว
 
-## About Laravel
+**Laravel 13 · PHP 8.5 · Sanctum · SQLite/PostgreSQL · Docker · PHPUnit (10 tests) · Pint · GitHub Actions**
 
-Laravel is a web application framework with expressive, elegant syntax. We believe development must be an enjoyable and creative experience to be truly fulfilling. Laravel takes the pain out of development by easing common tasks used in many web projects, such as:
+## จุดที่ออกแบบไว้
 
-- [Simple, fast routing engine](https://laravel.com/docs/routing).
-- [Powerful dependency injection container](https://laravel.com/docs/container).
-- Multiple back-ends for [session](https://laravel.com/docs/session) and [cache](https://laravel.com/docs/cache) storage.
-- Expressive, intuitive [database ORM](https://laravel.com/docs/eloquent).
-- Database agnostic [schema migrations](https://laravel.com/docs/migrations).
-- [Robust background job processing](https://laravel.com/docs/queues).
-- [Real-time event broadcasting](https://laravel.com/docs/broadcasting).
+- **เลขคิวไม่ซ้ำแม้กดพร้อมกัน**: ออกเลข `A001, A002, …` ใน transaction และ lock แถวของบริการ (`lockForUpdate`) ทำให้ตู้หลายตู้ไม่ได้เลขซ้ำ และเลขคิวเริ่มใหม่ทุกวัน
+- **เจ้าหน้าที่สองเคาน์เตอร์ไม่เรียกคนเดียวกัน**: `call-next` lock คิวแรกที่รออยู่ก่อนเปลี่ยนสถานะ
+- **สถานะเดินตามลำดับเท่านั้น**: `waiting → called → serving → done` (หรือ `skipped` / `cancelled`) กำหนดไว้ใน enum `TicketStatus::canTransitionTo()` ส่งสถานะที่ข้ามขั้นจะได้ 422
+- **ผู้ป่วยไม่ต้องล็อกอิน**: เช็กคิวด้วย UUID บนบัตร (ไม่ใช้ id ที่เดาได้) พร้อมจำนวนคนข้างหน้าและเวลารอโดยประมาณ
+- **สิทธิ์ตามบทบาท**: Staff เรียกคิวได้ · Admin จัดการบริการและดูสถิติ · rate limit ที่ login และตู้กดบัตร
 
-Laravel is accessible, powerful, and provides tools required for large, robust applications.
+## API (`/api/v1`)
 
-## Learning Laravel
+| Method | Path | ใคร | ทำอะไร |
+|---|---|---|---|
+| POST | `/auth/login` | ทุกคน | รับ token (Sanctum) |
+| GET | `/services` | ทุกคน | รายการบริการ |
+| POST | `/tickets` | ตู้กดบัตร | ออกบัตรคิว → เลขคิว + คนข้างหน้า + เวลารอ |
+| GET | `/tickets/{uuid}` | ผู้ป่วย | เช็กสถานะคิวตัวเอง |
+| GET | `/services/{id}/board` | จอแสดงคิว | กำลังเรียก/ให้บริการ + 5 คิวถัดไป |
+| POST | `/services/{id}/call-next` | Staff | เรียกคิวถัดไปไปที่เคาน์เตอร์ |
+| PATCH | `/tickets/{uuid}/status` | Staff | `serving` / `done` / `skipped` / `waiting` |
+| POST, PATCH | `/services` | Admin | เพิ่ม/แก้บริการ |
+| GET | `/stats/today` | Admin | สถิติวันนี้ + เวลารอเฉลี่ย |
 
-Laravel has the most extensive and thorough [documentation](https://laravel.com/docs) and video tutorial library of all modern web application frameworks, making it a breeze to get started with the framework.
-
-In addition, [Laracasts](https://laracasts.com) contains thousands of video tutorials on a range of topics including Laravel, modern PHP, unit testing, and JavaScript. Boost your skills by digging into our comprehensive video library.
-
-You can also watch bite-sized lessons with real-world projects on [Laravel Learn](https://laravel.com/learn), where you will be guided through building a Laravel application from scratch while learning PHP fundamentals.
-
-## Agentic Development
-
-Laravel's predictable structure and conventions make it ideal for AI coding agents like Claude Code, Cursor, and GitHub Copilot. Install [Laravel Boost](https://laravel.com/docs/ai) to supercharge your AI workflow:
+ตัวอย่าง:
 
 ```bash
-composer require laravel/boost --dev
-
-php artisan boost:install
+curl -X POST localhost:8000/api/v1/tickets -H 'Content-Type: application/json' -d '{"service_id":1}'
+# {"data":{"id":"9b1c…","number":"A001","status":"waiting",…},"ahead":0,"estimated_wait_minutes":0}
 ```
 
-Boost provides your agent 15+ tools and skills that help agents build Laravel applications while following best practices.
+## รัน
 
-## Contributing
+```bash
+docker build -t clinic-queue-api .
+docker run -p 8000:8000 -e SEED_DEMO=1 clinic-queue-api
+```
 
-Thank you for considering contributing to the Laravel framework! The contribution guide can be found in the [Laravel documentation](https://laravel.com/docs/contributions).
+บัญชีทดลอง (ข้อมูลสมมติ): `admin@example.com` / `password`, `staff@example.com` / `password`
 
-## Code of Conduct
-
-In order to ensure that the Laravel community is welcoming to all, please review and abide by the [Code of Conduct](https://laravel.com/docs/contributions#code-of-conduct).
-
-## Security Vulnerabilities
-
-If you discover a security vulnerability within Laravel, please send an e-mail to Taylor Otwell via [taylor@laravel.com](mailto:taylor@laravel.com). All security vulnerabilities will be promptly addressed.
-
-## License
-
-The Laravel framework is open-sourced software licensed under the [MIT license](https://opensource.org/licenses/MIT).
+ทดสอบ: `php artisan test` · ตรวจโค้ด: `./vendor/bin/pint --test`
