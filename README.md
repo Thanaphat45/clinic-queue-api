@@ -1,5 +1,7 @@
 # Clinic Queue API
 
+**Live:** https://clinic-queue-api-um6b.onrender.com/api/v1/services
+
 REST API สำหรับระบบบัตรคิวโรงพยาบาล/คลินิก: ตู้กดบัตรคิว, จอแสดงคิว, โทรศัพท์ผู้ป่วยเช็กคิว และเคาน์เตอร์เจ้าหน้าที่เรียกคิว
 
 **Laravel 13 · PHP 8.5 · Sanctum · SQLite/PostgreSQL · Docker · PHPUnit (21 tests) · Pint · GitHub Actions**
